@@ -1,0 +1,59 @@
+# ============================================================
+#  Hyperreal 超实数库 .gitignore
+# ============================================================
+
+# -------- 构建输出 --------
+build/
+out/
+dist/
+
+# -------- 编译产物 --------
+*.obj
+*.o
+*.a
+*.lib
+*.so
+*.so.*
+*.dll
+*.dylib
+*.exe
+*.out
+
+# -------- CMake --------
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+cmake.check_cache
+Makefile
+*.cmake
+!CMakeLists.txt
+
+# -------- Ninja --------
+.ninja_deps
+.ninja_log
+build.ninja
+rules.ninja
+
+# -------- IDE / 编辑器 --------
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+*.sln
+*.vcxproj*
+CMakeSettings.json
+.cache/
+
+# -------- OS 临时文件 --------
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store
+
+# -------- 备份与临时 --------
+*~
+*.bak
+*.tmp
+*.swp
+*._*
