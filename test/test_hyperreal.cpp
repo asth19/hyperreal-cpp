@@ -1,5 +1,4 @@
-// 头文件 Hyperreal.h 已瘦身（不含 bits/stdc++.h、无 using namespace std），
-// 测试程序显式引入自己需要的标准库头与命名空间，避免对库头的隐式依赖。
+// Hyperreal 超实数库 - 测试程序（16 组用例）
 #include "hyper/Hyperreal.h"
 #include <iostream>
 #include <iomanip>
@@ -89,7 +88,6 @@ int main()
     cout<<"exp(empty,4)  = "; empty.exp(4).print();          // 期望 1 (e^0=1)
     cout<<"cos(empty,4)  = "; empty.cos(4).print();          // 期望 1 (cos0=1)
     cout<<"sin(empty,4)  = "; empty.sin(4).print();          // 期望 0 (sin0=0)
-    // --- 标准化错误：HERR_LOG 模式（默认）--- 结构化日志打到 cerr
     cout<<"ln(empty,4)   = "; empty.ln(4).print();           // 期望 [Hyperreal E0211] ...
     cout<<"inv(empty,4)  = "; empty.inv(4).print();          // 期望 [Hyperreal E0101] ...
 
@@ -176,7 +174,7 @@ int main()
     // ============================================================
     //  13. 标准化错误处理专项演示
     //  - 错误码对照、HERR_LOG / HERR_SILENT / HERR_THROW 三种策略
-    //  - try/catch HyperrealException 并提取结构化信息
+    //  - try/catch hyp_exception 并提取结构化信息
     // ============================================================
     cout<<"\n========== 13. 标准化错误处理（策略切换）=========="<<endl;
     cout<<"当前错误策略默认值 : HERR_LOG (1)  实际="<<error_policy()<<endl;
@@ -190,18 +188,17 @@ int main()
     cout<<"empty / 0.0 不再打印日志，直接返回 : ";
     (empty / 0.0).print();
 
-    cout<<"\n--- (c) HERR_THROW：抛出 HyperrealException，调用方 try/catch ---"<<endl;
+    cout<<"\n--- (c) HERR_THROW：抛出 hyp_exception，调用方 try/catch ---"<<endl;
     set_error_policy(HERR_THROW);
 
-    // 用 lambda + 包装块逐案 try/catch，更直观
     auto run_case=[](const char* label, ErrorCode expect, auto&& action){
         cout<<"\n  ["<<label<<"]  期望错误码 E"
             <<setw(4)<<setfill('0')<<uppercase<<hex<<expect<<dec<<endl;
         try {
             Hyperreal r = action();
             cout<<"    正常返回 : "; r.print();
-        } catch (const HyperrealException& ex) {
-            cout<<"    catch HyperrealException:"<<endl;
+        } catch (const hyp_exception& ex) {
+            cout<<"    catch hyp_exception:"<<endl;
             cout<<"      what   = "<<ex.what()<<endl;
             cout<<"      code   = "<<ex.code_str()<<" (0x"
                 <<hex<<(int)ex.code()<<dec<<")"<<endl;
@@ -226,7 +223,7 @@ int main()
     run_case("empty.pow(Halfpi, 4) ", HRERR_ZERO_NEG_POWER,
             [&]{ return empty.pow( Hyperreal( vector<pair<double,int>>{{-1,0}} ), 4 ); });
 
-    // 恢复默认 HERR_LOG，避免后续（如果有）代码运行策略异常
+    // 恢复默认策略
     set_error_policy(HERR_LOG);
 
     // ============================================================
@@ -246,7 +243,7 @@ int main()
     Hyperreal expandedLimited = base.pow(20);
     cout<<"\n设置 max_terms=5 后，(1+eps)^20 的项数: "<<expandedLimited.size()<<endl;
     cout<<"误差上界 error_bound = "<<expanded.error_bound()<<endl;
-    // 恢复
+    // 恢复不限制
     set_max_terms(0);
 
     // truncated(n) 显式截断

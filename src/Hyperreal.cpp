@@ -69,22 +69,22 @@ void   set_max_terms(size_t n) noexcept { g_max_terms = n; }
 size_t max_terms() noexcept            { return g_max_terms; }
 
 // ============================================================
-//  Exception 实现
+//  hyp_exception 实现
 // ============================================================
-Exception::Exception(ErrorCode code,
+hyp_exception::hyp_exception(ErrorCode code,
                      const std::string& func,
                      const std::string& msg,
                      const std::string& detail)
     : _code(code), _func(func), _msg(msg), _detail(detail) {}
 
-std::string Exception::code_str() const
+std::string hyp_exception::code_str() const
 {
     std::ostringstream os;
     os << "E" << std::setw(4) << std::setfill('0') << std::uppercase << std::hex << (int)_code << std::dec;
     return os.str();
 }
 
-const char* Exception::what() const noexcept
+const char* hyp_exception::what() const noexcept
 {
     if(_what_cache.empty())
     {
@@ -92,7 +92,7 @@ const char* Exception::what() const noexcept
             _what_cache = format_error(_code, _func, _msg, _detail);
         } catch(...) {
             // noexcept 契约下绝不抛；内存分配失败时退化为静态串
-            return "hyper::Exception: oom in what()";
+            return "hyper::hyp_exception: oom in what()";
         }
     }
     return _what_cache.c_str();
@@ -121,7 +121,7 @@ Hyperreal Hyperreal::_raise(ErrorCode code,
             break;
         }
         case HERR_THROW:
-            throw Exception(code, f, m, detail);
+            throw hyp_exception(code, f, m, detail);
     }
     return Hyperreal(); // 返回零（空）
 }

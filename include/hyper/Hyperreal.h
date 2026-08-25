@@ -14,7 +14,7 @@
 //  ------------------------------------------------------------
 //  本命名空间封装超实数库的全部公开符号：
 //    - 配置类自由函数：错误策略、精度上限
-//    - 异常类：Exception
+//    - 异常类：hyp_exception
 //    - 主类：Hyperreal
 //    - 工厂函数：inf() / eps() / make(c,e)
 //    - 算法函数：derivative() / limit()
@@ -56,16 +56,16 @@ enum ErrorCode {
 enum ErrorPolicy {
     HERR_SILENT   = 0,   // 静默：只返回零 Hyperreal，不打印不抛
     HERR_LOG      = 1,   // 日志：向 cerr 打印结构化错误，返回零 Hyperreal（默认）
-    HERR_THROW    = 2    // 抛异常：抛出 Exception，调用方 try/catch
+    HERR_THROW    = 2    // 抛异常：抛出 hyp_exception，调用方 try/catch
 };
 
 // ============================================================
-//  Exception：继承 std::exception，携带错误码与消息
+//  hyp_exception：继承 std::exception，携带错误码与消息
 // ============================================================
-class Exception : public std::exception
+class hyp_exception : public std::exception
 {
 public:
-    Exception(ErrorCode code,
+    hyp_exception(ErrorCode code,
               const std::string& func,
               const std::string& msg,
               const std::string& detail = "");
@@ -269,10 +269,5 @@ Hyperreal limit(const std::function<Hyperreal(const Hyperreal&)>& f,
                 int approach = +1);
 
 }  // namespace hyper
-
-// ============================================================
-//  兼容别名（让旧代码 HyperrealException 仍可用）
-// ============================================================
-using HyperrealException = hyper::Exception;
 
 #endif
