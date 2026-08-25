@@ -903,27 +903,18 @@ Hyperreal Hyperreal::truncated(size_t n) const
     return c;
 }
 
-int Hyperreal::estimated_precision() const
+Hyperreal Hyperreal::truncated_by_exp(int min_exp, int max_exp) const
 {
-    int min_neg = 0;
+    // 保留指数落在 [min_exp, max_exp] 区间内的项
+    Hyperreal c;
     for(const auto& t : num)
     {
-        if(t.second < 0 && -t.second > min_neg) min_neg = -t.second;
+        if(t.second >= min_exp && t.second <= max_exp)
+            c.num.push_back(t);
     }
-    return min_neg;
-}
-
-double Hyperreal::error_bound() const
-{
-    // 截断后丢失的低指数项系数绝对值之和
-    size_t cap = max_terms();
-    if(cap == 0 || num.size() <= cap) return 0.0;
-    double sum = 0.0;
-    for(size_t i = cap; i < num.size(); ++i)
-    {
-        sum += std::fabs(num[i].first);
-    }
-    return sum;
+    c.sort_down();
+    c.remove0();
+    return c;
 }
 
 // ============================================================
@@ -1031,6 +1022,14 @@ Hyperreal limit(const std::function<Hyperreal(const Hyperreal&)>& f,
     if(approach < 0) e = -e;
     Hyperreal y = f(x0 + e);
     return y;
+}
+
+bool is_continuous(const std::function<Hyperreal(const Hyperreal&)>& f,
+                   const Hyperreal& x)
+{
+    // 非标准分析：f 在 x 连续 ⟺ f(x+eps) - f(x) 是无穷小（或零）
+    Hyperreal diff = f(x + eps()) - f(x);
+    return diff.is_zero() || diff.is_infinitesimal();
 }
 
 }  // namespace hyper

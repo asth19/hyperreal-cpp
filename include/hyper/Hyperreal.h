@@ -153,10 +153,8 @@ public:
 // ====================精度相关（实例方法）=====================
     // 对当前对象应用指定上限（保留高指数项），返回新对象
     Hyperreal truncated(size_t n) const;
-    // 估算当前精度：最高负指数的绝对值（无负指数时返回 0）
-    int estimated_precision() const;
-    // 误差上界：被截断项的绝对值之和
-    double error_bound() const;
+    // 按指数区间截断：保留 min_exp <= 指数 <= max_exp 的项，返回新对象
+    Hyperreal truncated_by_exp(int min_exp, int max_exp) const;
 
 // ====================类型判断=====================
     bool is_zero() const;          // 判断是否为0
@@ -267,6 +265,10 @@ Hyperreal derivative(const std::function<Hyperreal(const Hyperreal&)>& f,
 Hyperreal limit(const std::function<Hyperreal(const Hyperreal&)>& f,
                 const Hyperreal& x0,
                 int approach = +1);
+
+// 连续性判定：f 在 x 处连续 ⟺ f(x+eps) - f(x) 是无穷小（或零）
+bool is_continuous(const std::function<Hyperreal(const Hyperreal&)>& f,
+                   const Hyperreal& x);
 
 }  // namespace hyper
 

@@ -58,9 +58,9 @@ a_0 * inf^e_0 + a_1 * inf^e_1 + ... + a_n * inf^e_n
 - **超实数表示**：以 `系数*inf^指数` 的项序列存储，自动合并、排序、去零
 - **完整算术与比较**：`+ - * /`、`== != > < >= <=`，支持超实数与 `double` 混合运算
 - **数学函数**：`pow / exp / ln / sin / cos / inv`（基于级数展开，精度可控）
-- **微积分算法**：`derivative`（求导）、`limit`（极限，支持 `x→x0` 与 `x→inf`）
+- **微积分算法**：`derivative`（求导）、`limit`（极限，支持 `x→x0` 与 `x→inf`）、`is_continuous`（连续性判定）
 - **分量提取**：`standard_part` / `real_part` / `infinite_part` / `infinitesimal_part` / `principal_term`
-- **精度控制**：`set_max_terms` 截断项数、`error_bound` 误差上界、`truncated` 截断副本
+- **精度控制**：`set_max_terms` 截断项数、`truncated` 按项数截断、`truncated_by_exp` 按指数区间截断
 - **三档错误处理**：`HERR_SILENT`（静默）/ `HERR_LOG`（日志，默认）/ `HERR_THROW`（抛异常）
 - **结构化异常**：`hyp_exception` 继承 `std::exception`，携带错误码 + 函数名 + 上下文详情
 - **CMake 构建**：编译为静态库 `libhyperreal`，可被外部项目复用
@@ -145,6 +145,33 @@ Hyperreal b = 2.0 * from_vec;        // 左操作数 double
 Hyperreal c = from_vec * 3.0;        // 右操作数 double
 ```
 
+### 大小比较
+
+比较按"最高指数项主导"原则：先比最高指数项的指数，指数高者大；指数相同则比系数。
+
+```cpp
+using namespace hyper;
+
+// 不同指数：高次项主导
+Hyperreal hi = make(1, 2);      // inf^2
+Hyperreal lo = make(3, 1);      // 3*inf^1
+(hi > lo);                      // true，inf^2 量级大于 3*inf
+
+// 同指数：比较系数
+Hyperreal a5 = make(5, 0);      // 5
+Hyperreal a3 = make(3, 0);      // 3
+(a5 > a3);                      // true
+
+// 负数与负高次项
+Hyperreal neg   = make(-3, 0);  // -3
+Hyperreal neghi = make(-1, 2);  // -inf^2
+(neg < a3);                     // true
+(neghi < lo);                   // true，负的高次项比任何正项都小
+
+// 与 double 比较（支持混合）
+(Hyperreal(5.0) > 3.0);         // true
+```
+
 ### 数学函数
 
 ```cpp
@@ -227,7 +254,7 @@ h.principal_term().print();       // 2*inf^1            （首项）
 | 信息   | `print()` / `print(n)` / `get_coe(exp)` / `get_exp()` / `get_max()` / `get_num()` / `print_max()` / `size()` |
 | 类型判断 | `is_zero()` / `is_real()` / `is_infinite()` / `is_infinitesimal()`                                           |
 | 格式化  | `merge()` / `sort_up()` / `sort_down()` / `remove0()`                                                        |
-| 精度   | `truncated(n)` / `estimated_precision()` / `error_bound()`                                                   |
+| 精度   | `truncated(n)` / `truncated_by_exp(min_exp, max_exp)`                                                  |
 | 运算符  | `+ - * /`（含 `double` 与友元版本）、`== != > < >= <=`、`+= -= *= /=`                                                  |
 | 数学函数 | `pow(n)` / `pow(b, len)` / `exp(len)` / `ln(len)` / `inv(len)` / `sin(len)` / `cos(len)`                     |
 | 求值   | `eval(x)`（代入实数 x 求近似值）                                                                                       |
@@ -247,6 +274,7 @@ h.principal_term().print();       // 2*inf^1            （首项）
 | -------------------------------- | --------------------------------------------------------------------- |
 | `derivative(f, x, eps_coef=1.0)` | 求 `f` 在 `x` 处的导数（超实数差商）                                               |
 | `limit(f, x0, approach=+1)`      | 求 `f` 在 `x0` 处的极限，`approach` 为逼近方向（+1 右极限，-1 左极限）；`x0=inf()` 时求无穷远处极限 |
+| `is_continuous(f, x)`            | 判定 `f` 在 `x` 处是否连续（`f(x+eps)-f(x)` 为无穷小或零则连续） |
 
 ## 错误处理
 
@@ -308,15 +336,14 @@ using namespace hyper;
 
 Hyperreal e = (Hyperreal(1.0) + eps()).pow(20);   // 理论上 21 项
 std::cout << "项数: " << e.size() << "\n";         // 21
-std::cout << "精度: " << e.estimated_precision() << "\n";  // 20（最高负指数）
 
 set_max_terms(5);
 Hyperreal truncated_e = (Hyperreal(1.0) + eps()).pow(20);   // 截断到 5 项
 std::cout << "截断后项数: " << truncated_e.size() << "\n"; // 5
-std::cout << "误差上界: "  << truncated_e.error_bound() << "\n";
 
 // 对已有对象取截断副本
-Hyperreal first3 = e.truncated(3);    // 1*inf^0 + 20*inf^-1 + 190*inf^-2
+Hyperreal first3 = e.truncated(3);              // 按项数：保留前 3 项 1 + 20*eps + 190*eps^2
+Hyperreal band   = e.truncated_by_exp(-3, 0);   // 按指数区间：保留指数 [-3,0] 的项，丢弃无穷大项与更深无穷小
 ```
 
 ## 测试

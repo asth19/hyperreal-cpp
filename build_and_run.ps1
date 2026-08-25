@@ -1,4 +1,4 @@
-# ============================================================
+﻿# ============================================================
 #  Hyperreal 超实数库 —— 一键编译 & 运行脚本
 #  用法：右键此文件 → "使用 PowerShell 运行"，或配合 build_and_run.cmd 双击
 # ============================================================
@@ -7,10 +7,13 @@
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $ScriptDir
 
-# -------- 2. 控制台 UTF-8 输出（PowerShell 5 默认 OutputEncoding 是 GBK） --------
-[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-chcp 65001 | Out-Null
-$OutputEncoding = [System.Text.Encoding]::UTF8
+# -------- 2. 控制台 UTF-8 输出（三步法：切代码页 → 同步 .NET 读写编码） --------
+# PowerShell 5 默认：OutputEncoding=ASCII，Console Output/Input=系统代码页(936/GBK)
+# 解决沙盒里出现鏈熸湜式乱码的根本原因：Console InputEncoding 缺失 + 顺序不对
+chcp 65001 | Out-Null                                                     # 1) 控制台代码页切到 UTF-8（必须先切）
+[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)      # 2) .NET 写控制台（Write-Host 等）
+[Console]::InputEncoding  = [System.Text.UTF8Encoding]::new($false)      # 3) .NET 读外部程序输出（cmake/ninja/test_hyperreal 中文）
+$OutputEncoding           = [System.Text.UTF8Encoding]::new($false)      # 4) PowerShell pipe 给外部程序时的编码
 
 # -------- 3. 色标辅助函数（可选的视觉美化） --------
 function Write-Info($m)  { Write-Host " [INFO]  $m" -ForegroundColor Cyan }

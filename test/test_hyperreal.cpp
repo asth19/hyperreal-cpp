@@ -227,7 +227,7 @@ int main()
     set_error_policy(HERR_LOG);
 
     // ============================================================
-    //  14. 精度控制：set_max_terms / truncated / estimated_precision / error_bound
+    //  14. 精度控制：set_max_terms / truncated / truncated_by_exp
     // ============================================================
     cout<<"\n========== 14. 精度控制 =========="<<endl;
     cout<<"默认 max_terms = "<<max_terms()<<"  (0 = 不限制)"<<endl;
@@ -236,20 +236,23 @@ int main()
     Hyperreal base = Hyperreal(1.0) + eps();
     Hyperreal expanded = base.pow(20);
     cout<<"\n(1+eps)^20 展开后的项数: "<<expanded.size()<<endl;
-    cout<<"当前 estimated_precision (最高负指数): "<<expanded.estimated_precision()<<endl;
 
     // 设置全局上限，再看 pow 后是否被截断
     set_max_terms(5);
     Hyperreal expandedLimited = base.pow(20);
     cout<<"\n设置 max_terms=5 后，(1+eps)^20 的项数: "<<expandedLimited.size()<<endl;
-    cout<<"误差上界 error_bound = "<<expanded.error_bound()<<endl;
     // 恢复不限制
     set_max_terms(0);
 
-    // truncated(n) 显式截断
+    // truncated(n) 按项数截断
     Hyperreal tr = expanded.truncated(3);
     cout<<"\nexpanded.truncated(3) 后项数: "<<tr.size()<<endl;
     cout<<"truncated 前 3 项 = "; tr.print(3);
+
+    // truncated_by_exp(min, max) 按指数区间截断
+    Hyperreal tr_exp = expanded.truncated_by_exp(-3, 0);
+    cout<<"\nexpanded.truncated_by_exp(-3, 0) 后项数: "<<tr_exp.size()<<endl;
+    cout<<"保留指数 [-3,0] 的项 = "; tr_exp.print(4);
 
     // ============================================================
     //  15. 分量提取（非标准分析）
@@ -304,11 +307,24 @@ int main()
     // 极限：lim_{x→inf} x*sin(1/x) = 1
     auto f_xsin_over_x = [](const Hyperreal& x) -> Hyperreal {
         if(x.is_zero()) return Hyperreal(1.0);
-        return x * x.inv(3).sin(3) ;
+        return x * x.inv(2).sin(2) ;
     };
     Hyperreal lim_xsin_over_x = limit(f_xsin_over_x, inf());
     cout<<"[极限]  lim_{x→inf} x*sin(1/x) = "; lim_xsin_over_x.print();
     cout<<"           (期望 1)"<<endl;
+
+    // (e) 连续性判定：f(x)=x^2 在 x=2 连续（diff 为无穷小）
+    cout<<"\n[连续]  f(x)=x^2 在 x=2 连续? "
+        <<(is_continuous(f_square, Hyperreal(2.0)) ? "YES" : "NO")<<endl;
+    cout<<"           (期望 YES)"<<endl;
+
+    // (f) 连续性判定：离散函数 f(0)=0, f(x≠0)=1 在 x=0 不连续（diff = 1，非无穷小）
+    auto f_discrete = [](const Hyperreal& x) -> Hyperreal {
+        return x.is_zero() ? Hyperreal(0.0) : Hyperreal(1.0);
+    };
+    cout<<"[连续]  f(0)=0, f(x!=0)=1 在 x=0 连续? "
+        <<(is_continuous(f_discrete, Hyperreal(0.0)) ? "YES" : "NO")<<endl;
+    cout<<"           (期望 NO，离散函数在 0 处跳跃)"<<endl;
 
     return 0;
 }
