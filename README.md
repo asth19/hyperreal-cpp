@@ -57,10 +57,10 @@ a_0 * inf^e_0 + a_1 * inf^e_1 + ... + a_n * inf^e_n
 
 - **超实数表示**：以 `系数*inf^指数` 的项序列存储，自动合并、排序、去零
 - **完整算术与比较**：`+ - * /`、`== != > < >= <=`，支持超实数与 `double` 混合运算
-- **数学函数**：`pow / exp / ln / sin / cos / inv`（基于级数展开，精度可控）
+- **数学函数**：`pow / exp / ln / sin / cos / tan / sinh / cosh / tanh / inv / abs`（基于级数展开，精度可控）
 - **微积分算法**：`derivative`（求导）、`limit`（极限，支持 `x→x0` 与 `x→inf`）、`is_continuous`（连续性判定）
 - **分量提取**：`standard_part` / `real_part` / `infinite_part` / `infinitesimal_part` / `principal_term`
-- **精度控制**：`set_max_terms` 截断项数、`truncated` 按项数截断、`truncated_by_exp` 按指数区间截断
+- **精度控制**：`set_max_terms` 全局截断项数、`set_exp_range` 全局截断指数区间、`truncated` 按项数局部截断、`truncated_by_exp` 按指数区间局部截断、`normalize()` 统一归一化入口
 - **三档错误处理**：`HERR_SILENT`（静默）/ `HERR_LOG`（日志，默认）/ `HERR_THROW`（抛异常）
 - **结构化异常**：`hyp_exception` 继承 `std::exception`，携带错误码 + 函数名 + 上下文详情
 - **CMake 构建**：编译为静态库 `libhyperreal`，可被外部项目复用
@@ -182,7 +182,17 @@ x.exp(4).print();   // exp(3+eps) 泰勒展开
 x.inv(5).print();   // 1/(3+eps) 泰勒展开
 x.sin(4).print();   // sin(3+eps)
 x.cos(4).print();   // cos(3+eps)
+x.tan(4).print();    // tan(3+eps) = sin/cos
+x.sinh(4).print();  // sinh(3+eps) 双曲正弦
+x.cosh(4).print();  // cosh(3+eps) 双曲余弦
+x.tanh(4).print();  // tanh(3+eps) = sinh/cosh
 x.pow(2).print();   // (3+eps)^2 = 9 + 6*eps + eps^2
+
+// abs：符号由首项（最高指数项）系数决定，|x| = ±x（正数保持不变，负数整体取反）
+Hyperreal neg = make(-3, 0) + make(-1, -1);   // -3 - eps
+neg.abs().print();                            // 3*inf^0 + 1*inf^-1
+Hyperreal pos = make(3, 0) - make(2, -1);     // 3 - 2*eps（为正，保持不变）
+pos.abs().print();                            // 3*inf^0 + -2*inf^-1
 ```
 
 ### 微积分：求导与极限
@@ -242,7 +252,8 @@ h.principal_term().print();       // 2*inf^1            （首项）
 | 函数                                       | 说明                   |
 | ---------------------------------------- | -------------------- |
 | `set_error_policy(p)` / `error_policy()` | 设置/查询错误处理策略          |
-| `set_max_terms(n)` / `max_terms()`       | 设置/查询最大保留项数（0 = 不限制） |
+| `set_max_terms(n)` / `clear_max_terms()` / `max_terms()` | 设置、清除、查询最大保留项数（`nullopt` = 无限制） |
+| `set_exp_range(min, max)` / `clear_exp_range()` / `exp_range_min()` / `exp_range_max()` | 设置、清除、查询全局指数区间截断（`nullopt` = 该端无限制；设为 `(0,0)` 可只保留实数部分） |
 | `error_message(code)`                    | 错误码翻译为默认中文描述         |
 | `format_error(code, func, msg, detail)`  | 结构化错误日志格式            |
 
@@ -253,10 +264,10 @@ h.principal_term().print();       // 2*inf^1            （首项）
 | 构造   | `Hyperreal()` / `Hyperreal(double)` / `Hyperreal(const container&)`（后两者 `explicit`）                          |
 | 信息   | `print()` / `print(n)` / `get_coe(exp)` / `get_exp()` / `get_max()` / `get_num()` / `print_max()` / `size()` |
 | 类型判断 | `is_zero()` / `is_real()` / `is_infinite()` / `is_infinitesimal()`                                           |
-| 格式化  | `merge()` / `sort_up()` / `sort_down()` / `remove0()`                                                        |
+| 格式化  | `merge()` / `sort_up()` / `sort_down()` / `remove0()` / `normalize()`                                                   |
 | 精度   | `truncated(n)` / `truncated_by_exp(min_exp, max_exp)`                                                  |
 | 运算符  | `+ - * /`（含 `double` 与友元版本）、`== != > < >= <=`、`+= -= *= /=`                                                  |
-| 数学函数 | `pow(n)` / `pow(b, len)` / `exp(len)` / `ln(len)` / `inv(len)` / `sin(len)` / `cos(len)`                     |
+| 数学函数 | `pow(n)` / `pow(b, len)` / `exp(len)` / `ln(len)` / `inv(len)` / `sin(len)` / `cos(len)` / `tan(len)` / `sinh(len)` / `cosh(len)` / `tanh(len)` / `abs()` |
 | 求值   | `eval(x)`（代入实数 x 求近似值）                                                                                       |
 | 分量提取 | `standard_part()` / `real_part()` / `infinite_part()` / `infinitesimal_part()` / `principal_term()`          |
 
@@ -326,10 +337,19 @@ Hyperreal result = Hyperreal(0.0).inv(4);   // 直接返回 0，不打印
 | `HRERR_LN_INFINITY` (0x0213)    | `ln(无穷大)` 无定义           |
 | `HRERR_SIN_INFINITY` (0x0221)   | `sin(无穷大)` 无定义          |
 | `HRERR_COS_INFINITY` (0x0222)   | `cos(无穷大)` 无定义          |
+| `HRERR_TAN_INFINITY` (0x0223)   | `tan(无穷大)` 无定义          |
+| `HRERR_SINH_INFINITY` (0x0231)  | `sinh(无穷大)` 无定义         |
+| `HRERR_COSH_INFINITY` (0x0232)  | `cosh(无穷大)` 无定义         |
+| `HRERR_TANH_INFINITY` (0x0233)  | `tanh(无穷大)` 无定义         |
 
 ## 精度控制
 
-级数展开类函数（`exp` / `ln` / `sin` / `cos` / `inv` 等）接受 `len` 参数控制保留项数。全局 `set_max_terms(n)` 可统一限制所有展开操作的最高项数（0 = 不限制），防止 `pow` 等操作无限膨胀向量。
+级数展开类函数（`exp` / `ln` / `sin` / `cos` / `inv` 等）接受 `len` 参数控制保留项数。库提供两层全局截断，默认均为 **无限制模式**（`std::nullopt`）：
+
+- **按项数截断**：`set_max_terms(n)` 设置上限，`clear_max_terms()` 显式回到无限制模式，`max_terms()` 返回 `std::optional<size_t>` 查询当前值。
+- **按指数区间截断**：`set_exp_range(min, max)` 设置区间，`clear_exp_range()` 显式回到无限制模式，`exp_range_min()` / `exp_range_max()` 返回 `std::optional<int>` 查询当前值。两端均独立可选，适合只关心实数部分或只关心某段无穷小的场景。
+
+两个截断机制在每次 `normalize()`（排序 → 合并 → 去零 → 全局截断）时统一生效，而 `merge()` 只负责合并同指数项，不再隐式截断。
 
 ```cpp
 using namespace hyper;
@@ -337,13 +357,34 @@ using namespace hyper;
 Hyperreal e = (Hyperreal(1.0) + eps()).pow(20);   // 理论上 21 项
 std::cout << "项数: " << e.size() << "\n";         // 21
 
+// 按项数截断
 set_max_terms(5);
 Hyperreal truncated_e = (Hyperreal(1.0) + eps()).pow(20);   // 截断到 5 项
 std::cout << "截断后项数: " << truncated_e.size() << "\n"; // 5
+clear_max_terms();   // 显式清除，回到无限制模式
 
-// 对已有对象取截断副本
+// 全局指数区间截断
+Hyperreal h = Hyperreal({{1,2}, {3,1}, {5,0}, {7,-1}, {9,-2}});
+// h = inf^2 + 3*inf + 5 + 7*eps + 9*eps^2
+
+set_exp_range(0, 0);     // 只保留实数部分
+Hyperreal real_only = Hyperreal({{1,2}, {3,1}, {5,0}, {7,-1}, {9,-2}});
+std::cout << real_only;  // 5*inf^0
+
+set_exp_range(-1, 1);    // 保留指数 [-1, 1]
+Hyperreal band = Hyperreal({{1,2}, {3,1}, {5,0}, {7,-1}, {9,-2}});
+std::cout << band;       // 3*inf^1 + 5*inf^0 + 7*inf^-1
+clear_exp_range();       // 显式清除，回到无限制模式
+
+// 查询当前配置（返回 std::optional）
+if(auto cap = max_terms(); cap.has_value())
+    std::cout << "当前项数上限: " << cap.value() << "\n";
+else
+    std::cout << "当前无项数上限\n";
+
+// 对已有对象取截断副本（局部方法，不影响全局配置）
 Hyperreal first3 = e.truncated(3);              // 按项数：保留前 3 项 1 + 20*eps + 190*eps^2
-Hyperreal band   = e.truncated_by_exp(-3, 0);   // 按指数区间：保留指数 [-3,0] 的项，丢弃无穷大项与更深无穷小
+Hyperreal local_band = e.truncated_by_exp(-3, 0);   // 按指数区间：保留指数 [-3,0] 的项
 ```
 
 ## 测试

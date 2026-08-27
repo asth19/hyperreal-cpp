@@ -15,8 +15,10 @@ namespace hyper {
 
 namespace {
     // 全局状态：内部链接，仅本 .cpp 可见
-    ErrorPolicy g_policy      = HERR_LOG;
-    size_t      g_max_terms   = 0;  // 0 = 不限制
+    ErrorPolicy              g_policy    = HERR_LOG;
+    std::optional<size_t>    g_max_terms = std::nullopt;   // nullopt = 不限制
+    std::optional<int>       g_exp_min   = std::nullopt;   // nullopt = 不限制下限
+    std::optional<int>       g_exp_max   = std::nullopt;   // nullopt = 不限制上限
 
     // 数学常量（cos / sin 周期归约使用，避免函数内重复定义）
     constexpr double PI     = 3.14159265358979323846;
@@ -43,6 +45,10 @@ const char* error_message(ErrorCode code) noexcept
         case HRERR_LN_INFINITY:          return "ln(无穷大)无定义";
         case HRERR_SIN_INFINITY:         return "sin(无穷大)无定义";
         case HRERR_COS_INFINITY:         return "cos(无穷大)无定义";
+        case HRERR_TAN_INFINITY:         return "tan(无穷大)无定义";
+        case HRERR_SINH_INFINITY:        return "sinh(无穷大)无定义";
+        case HRERR_COSH_INFINITY:        return "cosh(无穷大)无定义";
+        case HRERR_TANH_INFINITY:        return "tanh(无穷大)无定义";
         case HRERR_NOT_INF_INFINITESIMAL:return "仅对x->0有效（最高指数必须<0）";
         default:                         return "未知错误";
     }
@@ -65,8 +71,22 @@ std::string format_error(ErrorCode code,
 // ============================================================
 //  全局配置：精度上限
 // ============================================================
-void   set_max_terms(size_t n) noexcept { g_max_terms = n; }
-size_t max_terms() noexcept            { return g_max_terms; }
+void set_max_terms(size_t n) noexcept           { g_max_terms = n; }
+void clear_max_terms() noexcept                 { g_max_terms = std::nullopt; }
+std::optional<size_t> max_terms() noexcept      { return g_max_terms; }
+
+void set_exp_range(int min_exp, int max_exp) noexcept
+{
+    g_exp_min = min_exp;
+    g_exp_max = max_exp;
+}
+void clear_exp_range() noexcept
+{
+    g_exp_min = std::nullopt;
+    g_exp_max = std::nullopt;
+}
+std::optional<int> exp_range_min() noexcept { return g_exp_min; }
+std::optional<int> exp_range_max() noexcept { return g_exp_max; }
 
 // ============================================================
 //  hyp_exception 实现
@@ -128,8 +148,8 @@ Hyperreal Hyperreal::_raise(ErrorCode code,
 
 void Hyperreal::_truncate_to_max()
 {
-    size_t cap = max_terms();          // ← 通过命名空间自由函数读取
-    if(cap == 0) return;
+    if(!max_terms().has_value()) return;     // nullopt = 不限制
+    size_t cap = max_terms().value();
     if(num.size() <= cap) return;
     // num 已按指数降序排列（高指数在前），保留前 cap 项
     num.resize(cap);
@@ -140,9 +160,7 @@ void Hyperreal::_truncate_to_max()
 Hyperreal::Hyperreal(const container& d)
 {
     num = d;
-    sort_down();
-    merge();
-    remove0();
+    normalize();
 }
 
 Hyperreal::Hyperreal() = default;
@@ -270,8 +288,6 @@ void Hyperreal::merge()
             }
         }
     }
-    // 钩入全局精度上限：归一化后自动截断到 max_terms() 项
-    _truncate_to_max();
 }
 
 void Hyperreal::sort_up()
@@ -302,6 +318,37 @@ void Hyperreal::remove0()
     }
 }
 
+void Hyperreal::_truncate_by_exp_range()
+{
+    auto lo = exp_range_min();
+    auto hi = exp_range_max();
+    if(!lo.has_value() && !hi.has_value()) return;  // 两端均不限制 = 跳过
+    // 保留 lo <= exp <= hi 的项（无值的端点视为不限制该端）
+    num.erase(
+        std::remove_if(num.begin(), num.end(),
+                       [lo, hi](const value_type& t) {
+                           bool bad = false;
+                           if(lo.has_value()) bad = bad || t.second < lo.value();
+                           if(hi.has_value()) bad = bad || t.second > hi.value();
+                           return bad;
+                       }),
+        num.end());
+}
+
+void Hyperreal::_apply_global_truncation()
+{
+    _truncate_to_max();
+    _truncate_by_exp_range();
+}
+
+void Hyperreal::normalize()
+{
+    sort_down();
+    merge();
+    remove0();
+    _apply_global_truncation();
+}
+
 // ====================运算符重载=====================
 
 Hyperreal Hyperreal::operator+(const Hyperreal& b) const
@@ -322,8 +369,7 @@ Hyperreal Hyperreal::operator+(const Hyperreal& b) const
         }
         if(!flag) ans.num.push_back(i);
     }
-    ans.sort_down();
-    ans.remove0();
+    ans.normalize();
     return ans;
 }
 
@@ -377,9 +423,7 @@ Hyperreal Hyperreal::operator*(const Hyperreal& b) const
             c.num.push_back({i.first * j.first, i.second + j.second});
         }
     }
-    c.merge();
-    c.sort_down();
-    c.remove0();
+    c.normalize();
     return c;
 }
 
@@ -579,7 +623,7 @@ Hyperreal Hyperreal::pow(const Hyperreal& b, int len) const
         return _raise(HRERR_ZERO_NEG_POWER, "pow(Hyperreal)", nullptr);
     }
     Hyperreal l = (*this).ln(len);
-    if(l.num.empty()) return Hyperreal();
+    if(l.num.empty()) return Hyperreal(1.0); // ln(x)=0 ⟺ x==1，此时 x^b = 1^b = 1
     Hyperreal bl = b * l;
     return bl.exp(len);
 }
@@ -673,8 +717,7 @@ Hyperreal Hyperreal::ln(int len) const
     {
         eps.num.push_back({term.first / c, term.second});
     }
-    eps.merge();
-    eps.sort_down();
+    eps.normalize();
     bool found = false;
     for(auto& term : eps.num)
     {
@@ -712,9 +755,7 @@ Hyperreal Hyperreal::ln(int len) const
     {
         ans.num.push_back({std::log(c), 0});
     }
-    ans.merge();
-    ans.sort_down();
-    ans.remove0();
+    ans.normalize();
     return ans;
 }
 
@@ -756,8 +797,7 @@ Hyperreal Hyperreal::inv(int len) const
     {
         eps.num.push_back({term.first / c, term.second - e});
     }
-    eps.merge();
-    eps.sort_down();
+    eps.normalize();
     bool found = false;
     for(auto& term : eps.num)
     {
@@ -792,9 +832,7 @@ Hyperreal Hyperreal::inv(int len) const
         t.first = t.first / c;
         t.second = t.second - e;
     }
-    ans.sort_down();
-    ans.merge();
-    ans.remove0();
+    ans.normalize();
     return ans;
 }
 
@@ -876,6 +914,108 @@ Hyperreal Hyperreal::sin(int len) const
     return cos_eps * std::sin(c) + sin_eps * std::cos(c);
 }
 
+Hyperreal Hyperreal::tan(int len) const
+{
+    // tan(x) = sin(x) / cos(x)；cos=0 时由除法 raise
+    if(num.empty()) return Hyperreal();
+    if(get_exp() > 0)
+    {
+        return _raise(HRERR_TAN_INFINITY, "tan", nullptr);
+    }
+    // 除法内部按 inv(10) 展开，级数相乘会让项数远超 len；
+    // 这里按 len 截断（与 sin/cos 的 len+1 项约定一致），避免输出膨胀。
+    return (sin(len) / cos(len)).truncated((size_t)len + 1);
+}
+
+// 双曲函数内部辅助：同时计算 sinh(eps) 与 cosh(eps) 级数
+// sinh(eps) = eps + eps^3/3! + eps^5/5! + ...
+// cosh(eps) = 1 + eps^2/2! + eps^4/4! + ...
+static void sinh_cosh_eps(const Hyperreal& eps, int len,
+                          Hyperreal& sh, Hyperreal& ch)
+{
+    sh = Hyperreal();          // 0（eps 为空时返回）
+    ch = Hyperreal(1.0);
+    if(eps.is_zero()) return;
+    Hyperreal eps2 = eps * eps;
+    Hyperreal t_sh = eps, t_ch(1.0);
+    sh = t_sh;
+    ch = t_ch;
+    for(int i = 1; i <= len; i++)
+    {
+        t_sh = t_sh * eps2 / ((2 * i) * (2 * i + 1));   // 无符号交替
+        t_ch = t_ch * eps2 / ((2 * i - 1) * (2 * i));
+        sh += t_sh;
+        ch += t_ch;
+    }
+}
+
+Hyperreal Hyperreal::sinh(int len) const
+{
+    if(num.empty()) return Hyperreal();
+    if(get_exp() > 0)
+    {
+        return _raise(HRERR_SINH_INFINITY, "sinh", nullptr);
+    }
+
+    double c = 0;
+    Hyperreal eps;
+    for(const auto& term : num)
+    {
+        if(term.second == 0) c = term.first;
+        else eps.num.push_back(term);
+    }
+
+    // sinh(c+eps) = sinh(c)*cosh(eps) + cosh(c)*sinh(eps)
+    Hyperreal sh_eps, ch_eps;
+    sinh_cosh_eps(eps, len, sh_eps, ch_eps);
+    return ch_eps * std::sinh(c) + sh_eps * std::cosh(c);
+}
+
+Hyperreal Hyperreal::cosh(int len) const
+{
+    if(num.empty()) return Hyperreal(1.0);
+    if(get_exp() > 0)
+    {
+        return _raise(HRERR_COSH_INFINITY, "cosh", nullptr);
+    }
+
+    double c = 0;
+    Hyperreal eps;
+    for(const auto& term : num)
+    {
+        if(term.second == 0) c = term.first;
+        else eps.num.push_back(term);
+    }
+
+    // cosh(c+eps) = cosh(c)*cosh(eps) + sinh(c)*sinh(eps)
+    Hyperreal sh_eps, ch_eps;
+    sinh_cosh_eps(eps, len, sh_eps, ch_eps);
+    return ch_eps * std::cosh(c) + sh_eps * std::sinh(c);
+}
+
+Hyperreal Hyperreal::tanh(int len) const
+{
+    // tanh(x) = sinh(x) / cosh(x)
+    if(num.empty()) return Hyperreal();
+    if(get_exp() > 0)
+    {
+        return _raise(HRERR_TANH_INFINITY, "tanh", nullptr);
+    }
+    // 同 tan：除法内部按 inv(10) 展开会膨胀项数，按 len 截断
+    return (sinh(len) / cosh(len)).truncated((size_t)len + 1);
+}
+
+Hyperreal Hyperreal::abs() const
+{
+    // 超实数符号由首项（最高指数项）系数决定（高指数项主导）：
+    //   |x| =  x   （首项系数 > 0，如 3 - 2*inf^-1 → 保持原样）
+    //   |x| = -x   （首项系数 < 0，如 -3 - inf^-1 → 3 + inf^-1）
+    // 0 的绝对值为 0。
+    if(num.empty()) return Hyperreal();
+    if(num[0].first > 0) return *this;
+    return -(*this);
+}
+
 // ====================数值求值=====================
 
 double Hyperreal::eval(double x) const
@@ -928,6 +1068,7 @@ Hyperreal Hyperreal::standard_part() const
     {
         if(t.second >= 0) c.num.push_back(t);
     }
+    c.normalize();
     return c;
 }
 
@@ -938,6 +1079,7 @@ Hyperreal Hyperreal::real_part() const
     {
         if(t.second == 0) c.num.push_back(t);
     }
+    c.normalize();
     return c;
 }
 
@@ -948,6 +1090,7 @@ Hyperreal Hyperreal::infinite_part() const
     {
         if(t.second > 0) c.num.push_back(t);
     }
+    c.normalize();
     return c;
 }
 
@@ -958,6 +1101,7 @@ Hyperreal Hyperreal::infinitesimal_part() const
     {
         if(t.second < 0) c.num.push_back(t);
     }
+    c.normalize();
     return c;
 }
 

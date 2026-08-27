@@ -7,6 +7,7 @@
 #include <exception>
 #include <functional>
 #include <utility>   // std::pair
+#include <optional>   // std::optional
 #include <cstddef>   // size_t
 
 // ============================================================
@@ -47,6 +48,10 @@ enum ErrorCode {
     HRERR_LN_INFINITY         = 0x0213,  // ln(无穷大) 无定义
     HRERR_SIN_INFINITY        = 0x0221,  // sin(无穷大) 无定义
     HRERR_COS_INFINITY        = 0x0222,  // cos(无穷大) 无定义
+    HRERR_TAN_INFINITY        = 0x0223,  // tan(无穷大) 无定义
+    HRERR_SINH_INFINITY       = 0x0231,  // sinh(无穷大) 无定义
+    HRERR_COSH_INFINITY       = 0x0232,  // cosh(无穷大) 无定义
+    HRERR_TANH_INFINITY       = 0x0233,  // tanh(无穷大) 无定义
 
     // 参数有效性：内部辅助函数收敛域
     HRERR_NOT_INF_INFINITESIMAL = 0x0301 // ln_1lessx / inv_1lessx 仅对 x->0 有效
@@ -109,9 +114,18 @@ std::string format_error(ErrorCode code,
                          const std::string& msg,
                          const std::string& detail = "");
 
-// 设置/查询最大保留项数（防止 pow/级数 等操作无限膨胀向量），0 表示不限制
-void   set_max_terms(size_t n) noexcept;
-size_t max_terms() noexcept;
+// 设置/查询最大保留项数（防止 pow/级数 等操作无限膨胀向量）
+// clear_max_terms() 显式重置为无限制模式
+void                         set_max_terms(size_t n) noexcept;
+void                         clear_max_terms() noexcept;
+std::optional<size_t>        max_terms() noexcept;
+
+// 设置/查询全局指数区间截断：仅保留 [min_exp, max_exp] 范围内的项
+// clear_exp_range() 显式重置为无限制模式；set_exp_range(0, 0) 可只保留实数部分
+void                         set_exp_range(int min_exp, int max_exp) noexcept;
+void                         clear_exp_range() noexcept;
+std::optional<int>           exp_range_min() noexcept;
+std::optional<int>           exp_range_max() noexcept;
 
 // ============================================================
 //  Hyperreal 主体
@@ -133,6 +147,12 @@ private:
 
     // 内部：按 hyper::max_terms() 截断到最高 n 项（保留高指数项）
     void _truncate_to_max();
+
+    // 内部：按 hyper::exp_range_min/max() 截断指数区间
+    void _truncate_by_exp_range();
+
+    // 内部：统一应用所有全局截断（项数 + 指数区间）
+    void _apply_global_truncation();
 
 public:
 // ====================构造函数=====================
@@ -167,6 +187,7 @@ public:
     void sort_up();     // 按指数升序排序
     void sort_down();   // 按指数降序排序
     void remove0();     // 移除系数为0的指数项
+    void normalize();   // 统一归一化：sort_down → merge → remove0 → 全局截断
 
 // ====================运算符重载=====================
     Hyperreal operator+(const Hyperreal& b) const;  // 加法
@@ -229,6 +250,11 @@ public:
     Hyperreal inv(int len) const;                                   // 1/x函数
     Hyperreal cos(int len) const;                                   // 余弦函数
     Hyperreal sin(int len) const;                                   // 正弦函数
+    Hyperreal tan(int len) const;                                   // 正切函数
+    Hyperreal sinh(int len) const;                                  // 双曲正弦函数
+    Hyperreal cosh(int len) const;                                  // 双曲余弦函数
+    Hyperreal tanh(int len) const;                                  // 双曲正切函数
+    Hyperreal abs() const;                                          // 绝对值
 
 // ====================数值求值=====================
     double eval(double x) const;                                    // 求值，x为实数

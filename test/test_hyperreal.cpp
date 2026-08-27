@@ -110,6 +110,20 @@ int main()
     cout<<"sin(inf^2,4)      = "; Hyperreal(vector<pair<double,int>>{{1,2}}).sin(4).print();
     cout<<"cos(inf^2,4)      = "; Hyperreal(vector<pair<double,int>>{{1,2}}).cos(4).print();
 
+    // tan / sinh / cosh / tanh / abs
+    cout<<"\n---------- 双曲函数 & abs ----------"<<endl;
+    Hyperreal tiny = eps();                                        // inf^-1
+    cout<<"tan(inf^-1,4)     = "; tiny.tan(4).print();              // tan(eps) ≈ eps
+    cout<<"sinh(inf^-1,4)    = "; tiny.sinh(4).print();            // sinh(eps) ≈ eps
+    cout<<"cosh(inf^-1,4)    = "; tiny.cosh(4).print();             // cosh(eps) ≈ 1 + eps^2/2
+    cout<<"tanh(inf^-1,4)    = "; tiny.tanh(4).print();             // tanh(eps) ≈ eps
+    cout<<"sinh(1,4)         = "; Hyperreal(1.0).sinh(4).print();  // sinh(1) ≈ 1.1752
+    cout<<"cosh(1,4)         = "; Hyperreal(1.0).cosh(4).print();  // cosh(1) ≈ 1.5431
+    cout<<"tanh(1,4)         = "; Hyperreal(1.0).tanh(4).print();  // tanh(1) ≈ 0.7616
+    cout<<"abs(-3+inf^-1)   = "; (-normal).abs().print();         // 3 + inf^-1
+    cout<<"abs(3-2*inf^-1)  = "; (Hyperreal(3.0) - make(2,-1)).abs().print(); // 3 - 2*inf^-1（正数保持符号）
+    cout<<"tan/sinh/cosh(inf^2) = "; Hyperreal(vector<pair<double,int>>{{1,2}}).tan(4).print();
+
     cout<<"\n========== 8. 正常向量函数 =========="<<endl;
     cout<<"ln(3+inf^-1)  = "; normal.ln(4).print();
     cout<<"inv(3+inf^-1) = "; normal.inv(4).print();
@@ -128,6 +142,10 @@ int main()
     // 有理数指数
     cout<<"Hyperreal(4).pow(0.5,5)= "; Hyperreal(4.0).pow(0.5,5).print(); // sqrt(4)=2
     cout<<"Hyperreal(8).pow(1.0/3,5)= "; Hyperreal(8.0).pow(1.0/3,5).print(); // cbrt(8)=2
+    // 底数为 1：x^b = 1 对任意 b 成立（ln(1)=0 的特例）
+    cout<<"Hyperreal(1).pow(0.5,5) = "; Hyperreal(1.0).pow(0.5,5).print();  // 1^0.5=1
+    cout<<"Hyperreal(1).pow(2,5)   = "; Hyperreal(1.0).pow(2.0,5).print();  // 1^2=1
+    cout<<"Hyperreal(1).pow(eps,5) = "; Hyperreal(1.0).pow(eps(),5).print();// 1^eps=1
     // (1+inf^-1)^(1/inf^-1) → e
     Hyperreal one_eps(vector<pair<double,int>>{{1,0},{1,-1}});
     Hyperreal inv_eps(vector<pair<double,int>>{{1,-1}});
@@ -223,6 +241,12 @@ int main()
     run_case("empty.pow(Halfpi, 4) ", HRERR_ZERO_NEG_POWER,
             [&]{ return empty.pow( Hyperreal( vector<pair<double,int>>{{-1,0}} ), 4 ); });
 
+    cout<<"\n--- (d) error_message 翻译完整性（新增错误码不能回落为未知错误）---"<<endl;
+    cout<<"E0223 tan  : "<<error_message(HRERR_TAN_INFINITY)<<"   (期望 tan(无穷大)无定义)"<<endl;
+    cout<<"E0231 sinh : "<<error_message(HRERR_SINH_INFINITY)<<"   (期望 sinh(无穷大)无定义)"<<endl;
+    cout<<"E0232 cosh : "<<error_message(HRERR_COSH_INFINITY)<<"   (期望 cosh(无穷大)无定义)"<<endl;
+    cout<<"E0233 tanh : "<<error_message(HRERR_TANH_INFINITY)<<"   (期望 tanh(无穷大)无定义)"<<endl;
+
     // 恢复默认策略
     set_error_policy(HERR_LOG);
 
@@ -230,7 +254,7 @@ int main()
     //  14. 精度控制：set_max_terms / truncated / truncated_by_exp
     // ============================================================
     cout<<"\n========== 14. 精度控制 =========="<<endl;
-    cout<<"默认 max_terms = "<<max_terms()<<"  (0 = 不限制)"<<endl;
+    cout<<"默认 max_terms = "<<(max_terms().has_value() ? to_string(max_terms().value()) : "unlimited")<<endl;
 
     // 构造一个高精度无穷小级数：(1+eps)^20 展开后会有很多项
     Hyperreal base = Hyperreal(1.0) + eps();
@@ -242,7 +266,7 @@ int main()
     Hyperreal expandedLimited = base.pow(20);
     cout<<"\n设置 max_terms=5 后，(1+eps)^20 的项数: "<<expandedLimited.size()<<endl;
     // 恢复不限制
-    set_max_terms(0);
+    clear_max_terms();
 
     // truncated(n) 按项数截断
     Hyperreal tr = expanded.truncated(3);
@@ -253,6 +277,31 @@ int main()
     Hyperreal tr_exp = expanded.truncated_by_exp(-3, 0);
     cout<<"\nexpanded.truncated_by_exp(-3, 0) 后项数: "<<tr_exp.size()<<endl;
     cout<<"保留指数 [-3,0] 的项 = "; tr_exp.print(4);
+
+    // ---- 全局指数区间截断 ----
+    cout<<"\n--- 全局指数区间截断 set_exp_range ---"<<endl;
+    auto er_min = exp_range_min();
+    auto er_max = exp_range_max();
+    cout<<"默认 exp_range = ["<<(er_min.has_value() ? to_string(er_min.value()) : "unlimited")
+        <<", "<<(er_max.has_value() ? to_string(er_max.value()) : "unlimited")<<"]"<<endl;
+
+    // 只保留实数部分：set_exp_range(0, 0)
+    Hyperreal big = Hyperreal(container{{1,2}, {3,1}, {5,0}, {7,-1}, {9,-2}});
+    cout<<"big 原始 = "; big.print();
+    set_exp_range(0, 0);
+    Hyperreal only_real = Hyperreal(container{{1,2}, {3,1}, {5,0}, {7,-1}, {9,-2}});
+    cout<<"set_exp_range(0,0) 后构造 = "; only_real.print();
+    // 验证算术运算也受影响
+    set_exp_range(-1, 1);
+    Hyperreal clipped = Hyperreal(container{{1,2}, {3,1}, {5,0}, {7,-1}, {9,-2}});
+    cout<<"set_exp_range(-1,1) 后构造 = "; clipped.print();
+    cout<<"clipped.size() = "<<clipped.size()<<"  (期望 3)"<<endl;
+    // 恢复不限制
+    clear_exp_range();
+    auto er_min2 = exp_range_min();
+    auto er_max2 = exp_range_max();
+    cout<<"恢复后 exp_range = ["<<(er_min2.has_value() ? to_string(er_min2.value()) : "unlimited")
+        <<", "<<(er_max2.has_value() ? to_string(er_max2.value()) : "unlimited")<<"]"<<endl;
 
     // ============================================================
     //  15. 分量提取（非标准分析）
