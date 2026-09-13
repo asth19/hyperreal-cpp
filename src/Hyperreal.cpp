@@ -290,6 +290,25 @@ void Hyperreal::merge()
     }
 }
 
+// 线性合并版：要求 num 已经 sort_up/sort_down 有序，
+// 同指数项必然相邻，单趟扫描 O(n) 完成；语义与 merge() 一致
+// （系数累加进先出现的项），对无序输入不做保证——那种情况请用 merge()。
+void Hyperreal::merge_sorted()
+{
+    if(num.size() < 2) return;
+    container merged;
+    merged.reserve(num.size());  
+    merged.push_back(num[0]);
+    for(size_t i = 1; i < num.size(); i++)
+    {
+        if(merged.back().second == num[i].second)
+            merged.back().first += num[i].first;
+        else
+            merged.push_back(num[i]);
+    }
+    num = std::move(merged);
+}
+
 void Hyperreal::sort_up()
 {
     std::sort(num.begin(), num.end(), [](const value_type& a, const value_type& b)
@@ -344,7 +363,7 @@ void Hyperreal::_apply_global_truncation()
 void Hyperreal::normalize()
 {
     sort_down();
-    merge();
+    merge_sorted();   // sort_down 后同指数项相邻，用 O(n) 线性合并
     remove0();
     _apply_global_truncation();
 }
@@ -605,10 +624,14 @@ Hyperreal Hyperreal::pow(signed int n) const
         return _raise(HRERR_NEG_INT_POWER, "pow(signed int)", nullptr,
                       "接收到 n = " + std::to_string(n));
     }
+    // 快速幂：O(log n) 次乘法（低位在前的二进制分解）
     Hyperreal ans(1.0);
-    for(int i = 0; i < n; i++)
+    Hyperreal base = *this;
+    while(n > 0)
     {
-        ans = ans * (*this);
+        if(n & 1) ans = ans * base;
+        n >>= 1;
+        if(n > 0) base = base * base;  // 最后一次平方是多余的，跳过
     }
     return ans;
 }
@@ -676,8 +699,10 @@ Hyperreal Hyperreal::ln_1lessx(int len) const
     Hyperreal ans, temp(d);
     for(int i = 0; i <= len; i++)
     {
-        temp = temp * (*this) / (i + 1);
-        ans += temp;
+        // ln(1-x) = -Σ x^k/k：幂次累乘，系数每次单独除以 k
+        // （不能写成 temp * x / (i+1)，否则除法累积成 1/k!）
+        temp = temp * (*this);
+        ans += temp / (i + 1);
     }
     return ans;
 }

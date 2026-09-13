@@ -183,11 +183,12 @@ public:
     bool is_infinitesimal() const; // 判断是否为无穷小
 
 // ====================格式化=====================
-    void merge();       // 合并相同指数项
+    void merge();       // 合并相同指数项（无序输入也正确，O(n²)）
+    void merge_sorted(); // 合并相邻同指数项（O(n)，要求已 sort_up/sort_down）
     void sort_up();     // 按指数升序排序
     void sort_down();   // 按指数降序排序
     void remove0();     // 移除系数为0的指数项
-    void normalize();   // 统一归一化：sort_down → merge → remove0 → 全局截断
+    void normalize();   // 统一归一化：sort_down → merge_sorted → remove0 → 全局截断
 
 // ====================运算符重载=====================
     Hyperreal operator+(const Hyperreal& b) const;  // 加法

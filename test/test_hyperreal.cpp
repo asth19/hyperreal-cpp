@@ -24,6 +24,17 @@ int main()
     cout<<"zero_d.size()  = "<<zero_d.size()<<"   (期望 0)"<<endl;
     cout<<"normal.size() = "<<normal.size()<<"   (期望 2)"<<endl;
 
+    // merge_sorted：构造含同指数项的向量，构造归一化（内部走 sort_down + merge_sorted）
+    // 应合并为 3*inf^2 + 3*inf^0 + 9*inf^-1
+    Hyperreal dup(vector<pair<double,int>>{{1,2},{2,2},{3,0},{4,-1},{5,-1}});
+    cout<<"dup 归一化    = "; dup.print();
+    cout<<"dup.size()    = "<<dup.size()<<"   (期望 3)"<<endl;
+    // 有序输入下 merge 与 merge_sorted 结果一致；对已合并数据两者均为空操作
+    Hyperreal dup_m = dup;        dup_m.merge();
+    Hyperreal dup_ms = dup;       dup_ms.merge_sorted();
+    cout<<"merge == merge_sorted : "<<(dup_m == dup_ms)<<"   (期望 1)"<<endl;
+    cout<<"merge_sorted 幂等     : "<<(dup_ms == dup)<<"   (期望 1)"<<endl;
+
     cout<<"\n========== 2. print 空向量 =========="<<endl;
     cout<<"empty:    "; empty.print();
     cout<<"zero_vec: "; zero_vec.print();
@@ -150,6 +161,16 @@ int main()
     Hyperreal one_eps(vector<pair<double,int>>{{1,0},{1,-1}});
     Hyperreal inv_eps(vector<pair<double,int>>{{1,-1}});
     cout<<"(1+inf^-1)^(1/inf^-1) ≈ e: "; one_eps.pow(inv_eps.inv(5),5).print();
+
+    // 快速幂正确性：(1+eps)^10 = Σ C(10,k)·eps^k，系数应精确为 1,10,45,120,210,252,...
+    Hyperreal p10 = (Hyperreal(1.0) + eps()).pow(10);
+    cout<<"(1+eps)^10 = "; p10.print();
+    cout<<"           (期望 1 + 10eps + 45eps^2 + 120eps^3 + ... + eps^10，共 11 项)"<<endl;
+    cout<<"p10.size() = "<<p10.size()<<"   (期望 11)"<<endl;
+    // 幂次复合一致性：(x^3)^2 == x^6
+    cout<<"(2^3)^2 == 2^6 : "
+        <<(Hyperreal(2.0).pow(3).pow(2) == Hyperreal(2.0).pow(6))
+        <<"   (期望 1)"<<endl;
 
     cout<<"\n========== 10. 链式运算 =========="<<endl;
     // (empty + normal) * 2 - empty == normal * 2
@@ -361,6 +382,19 @@ int main()
     Hyperreal lim_xsin_over_x = limit(f_xsin_over_x, inf());
     cout<<"[极限]  lim_{x→inf} x*sin(1/x) = "; lim_xsin_over_x.print();
     cout<<"           (期望 1)"<<endl;
+
+    // 复杂极限：lim_{n→∞} n²[(1+1/(n+1))^(n+1) - (1+1/n)^n] = e/2
+    // 由 (1+1/n)^n = e(1 - 1/(2n) + 11/(24n²) - 7/(16n³) - ...)，
+    // 两项相减后 e 与 -e/(2n) 完全抵消，首项为 e/(2n²)，故 n²·差 → e/2。
+    // 该极限同时考验：无穷大指数幂 pow、inv 级数、高阶相消后的首项精度。
+    auto f_e_half = [](const Hyperreal& n) -> Hyperreal {
+        Hyperreal a = (Hyperreal(1.0) + (n + 1).inv(3)).pow(n + 1, 3);
+        Hyperreal b = (Hyperreal(1.0) + n.inv(3)).pow(n, 3);
+        return (a - b) * (n * n);
+    };
+    Hyperreal lim_e_half = limit(f_e_half, inf());
+    cout<<"[极限]  lim_{n→∞} n²[(1+1/(n+1))^(n+1) - (1+1/n)^n] = "; lim_e_half.print(4);
+    cout<<"           (期望 e/2 ≈ 1.35914)"<<endl;
 
     // (e) 连续性判定：f(x)=x^2 在 x=2 连续（diff 为无穷小）
     cout<<"\n[连续]  f(x)=x^2 在 x=2 连续? "

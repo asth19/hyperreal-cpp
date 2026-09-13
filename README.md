@@ -218,6 +218,17 @@ auto f_xsin_over_x = [](const Hyperreal& x) -> Hyperreal {
 };
 Hyperreal lim_inf = limit(f_xsin_over_x, inf());
 lim_inf.print();  // 1*inf^0 + ...
+
+// 复杂极限：lim_{n→∞} n²[(1+1/(n+1))^(n+1) - (1+1/n)^n] = e/2
+// (1+1/n)^n = e(1 - 1/(2n) + 11/(24n²) - ...)，两项相减后首项为 e/(2n²)。
+// 考验无穷大指数幂 pow、inv 级数与高阶相消后的首项精度。
+auto f_e_half = [](const Hyperreal& n) -> Hyperreal {
+    Hyperreal a = (Hyperreal(1.0) + (n + 1).inv(3)).pow(n + 1, 3);
+    Hyperreal b = (Hyperreal(1.0) + n.inv(3)).pow(n, 3);
+    return (a - b) * (n * n);
+};
+Hyperreal lim_e_half = limit(f_e_half, inf());
+lim_e_half.print();  // 1.35914*inf^0 + -3.8509*inf^-1 + ...   (e/2 = 1.35914...)
 ```
 
 ### 分量提取
@@ -264,10 +275,10 @@ h.principal_term().print();       // 2*inf^1            （首项）
 | 构造   | `Hyperreal()` / `Hyperreal(double)` / `Hyperreal(const container&)`（后两者 `explicit`）                          |
 | 信息   | `print()` / `print(n)` / `get_coe(exp)` / `get_exp()` / `get_max()` / `get_num()` / `print_max()` / `size()` |
 | 类型判断 | `is_zero()` / `is_real()` / `is_infinite()` / `is_infinitesimal()`                                           |
-| 格式化  | `merge()` / `sort_up()` / `sort_down()` / `remove0()` / `normalize()`                                                   |
+| 格式化  | `merge()`（无序输入，O(n²)）/ `merge_sorted()`（有序输入线性合并，O(n)）/ `sort_up()` / `sort_down()` / `remove0()` / `normalize()`（内部走 `merge_sorted`）                                                   |
 | 精度   | `truncated(n)` / `truncated_by_exp(min_exp, max_exp)`                                                  |
 | 运算符  | `+ - * /`（含 `double` 与友元版本）、`== != > < >= <=`、`+= -= *= /=`                                                  |
-| 数学函数 | `pow(n)` / `pow(b, len)` / `exp(len)` / `ln(len)` / `inv(len)` / `sin(len)` / `cos(len)` / `tan(len)` / `sinh(len)` / `cosh(len)` / `tanh(len)` / `abs()` |
+| 数学函数 | `pow(n)`（非负整数幂，快速幂 O(log n)）/ `pow(b, len)` / `exp(len)` / `ln(len)` / `inv(len)` / `sin(len)` / `cos(len)` / `tan(len)` / `sinh(len)` / `cosh(len)` / `tanh(len)` / `abs()` |
 | 求值   | `eval(x)`（代入实数 x 求近似值）                                                                                       |
 | 分量提取 | `standard_part()` / `real_part()` / `infinite_part()` / `infinitesimal_part()` / `principal_term()`          |
 
@@ -411,6 +422,8 @@ Hyperreal local_band = e.truncated_by_exp(-3, 0);   // 按指数区间：保留�
            (期望 0.5)
 [极限]  lim_{x→inf} x*sin(1/x) = 1*inf^0 + ...
            (期望 1)
+[极限]  lim_{n→∞} n²[(1+1/(n+1))^(n+1) - (1+1/n)^n] = 1.35914*inf^0 + -3.8509*inf^-1 + ...
+           (期望 e/2 ≈ 1.35914)
 ```
 
 ## 编译选项
